@@ -53,7 +53,7 @@ class CG_Structure:
         else:
             self.proteins = []
         
-    def analyze_dna(self,leading_strands=None,pairs_in_structure=None,sel=None,trajectory=None,overwrite_existing_dna=False):
+    def analyze_dna(self,leading_strands=None,pairs_in_structure=None,sel='(type C or type O or type N) and not protein',trajectory=None,overwrite_existing_dna=False):
         '''Method that runs analysis of mda Universe and trajectory if given.
         
             Arguments:
@@ -147,6 +147,7 @@ class CG_Structure:
         coords = []
         
         for ts in self.dna.trajectory:
+            print(1)
             frame_coord = torch.tensor(self.dna.origins.reshape(1,-1,3))
             if self.proteins:
                 prot_coord = torch.vstack([protein.origins for protein in proteins]).reshape(1,-1,3)
@@ -171,7 +172,7 @@ class CG_Structure:
         return u
 
     
-    def view_structure(self,max_charge=None):
+    def view_structure(self,disable_charge_bar=True,max_charge=None):
         '''Method for visualization of current CG structure
             
             Arguments:

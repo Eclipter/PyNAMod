@@ -1,3 +1,7 @@
+'''
+This module contains dictionary of pdb files of standard nucleotide bases.
+'''
+
 nucleotides_pdb = {
     'A':'''
 REMARK    3DNA by Dr. Xiang-Jun Lu (http://x3dna.org/)

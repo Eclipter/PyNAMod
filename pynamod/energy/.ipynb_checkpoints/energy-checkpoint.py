@@ -6,7 +6,9 @@ from pynamod.external_forces.restraint import Restraint
 
 
 class Energy:
-    '''This class creates force matrices for a given CG structure and calculates its energy.'''
+    '''
+    This class creates force matrices for a given CG structure and calculates its energy.
+      '''
     def __init__(self,K_free=1,K_elec=1,K_bend=1,KT=300*8.314,salt_c=150,water_epsr = 81,include_elst=True):
         
         eps0 = 8.854
@@ -43,7 +45,8 @@ class Energy:
             
             **CG_structure** - structure for which matrices are set.
             
-            **ignore_neighbors** - number of neigboring dna pairs (in both sides) interactions with which are ignored in real space. Deafult 5.'''
+            **ignore_neighbors** - number of neigboring dna pairs (in both sides) interactions with which are ignored in real space. Deafult 5.
+            '''
         AVERAGE,FORCE_CONST,DISP = get_consts_olson_98()
         pairtypes = [pair.pair_name for pair in CG_structure.dna.pairs_list]
         self.ignore_neighbors = ignore_neighbors

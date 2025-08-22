@@ -3,25 +3,26 @@ import time
 import numpy as np
 from tqdm.auto import tqdm
 
-from pynamod.geometry.trajectories import Integrator_Trajectory
+from pynamod.geometry.trajectories import Integrator_Trajectory, H5_Trajectory, Tensor_Trajectory
 
 from pynamod.geometry.bp_step_geometry import Geometry_Functions
 
 class Iterator:
-    def __init__(self,dna_structure,energy,trajectory,sigma_transl=1,sigma_rot=1):
+    def __init__(self,dna_structure,energy,sigma_transl=1,sigma_rot=1):
         self.dna_structure = dna_structure
         self.energy = energy
         self.sigma_transl = sigma_transl
         self.sigma_rot = sigma_rot
-        self.h5_trajectory = trajectory
-        self.h5_trajectory.attrs_names.append('energies')
-    
+        self.res_trajectory = dna_structure.dna.geom_params.trajectory
+        
     
     
     def run(self,movable_steps,target_accepted_steps=int(1e5),max_steps=int(1e6),transfer_to_memory_every=None,save_every=1,
-            HDf5_file=None,mute=False,start_from_traj=False,KT_factor=1,integration_mod='minimize',device='cpu'):
-        
-        self._prepare_system(target_accepted_steps,transfer_to_memory_every,device,movable_steps,integration_mod,start_from_traj)
+            mute=False,KT_factor=1,integration_mod='minimize',device='cpu',traj_init_step=None):
+        if 'energies' not in self.res_trajectory.attrs_names:
+            self.res_trajectory.add_attr('energies',(4,))
+            
+        self._prepare_system(target_accepted_steps,transfer_to_memory_every,device,movable_steps,integration_mod,traj_init_step)
         
         total_step_bar = tqdm(total=max_steps,desc='Steps',disable=mute)
         info_pbar = tqdm(total=100,bar_format='{l_bar}{bar}{postfix}',desc='Acceptance rate',disable=mute)
@@ -64,10 +65,9 @@ class Iterator:
     def to(self,device):
         self.trajectory.to(device)
         self.energy.to(device)
-        
+    
             
-            
-    def _prepare_system(self,target_accepted_steps,transfer_to_memory_every,device,movable_steps,integration_mod,start_from_traj):
+    def _prepare_system(self,target_accepted_steps,transfer_to_memory_every,device,movable_steps,integration_mod,traj_init_step):
         self.normal_scale = torch.tensor([*[self.sigma_transl]*3,*[self.sigma_rot]*3],device=device)
         
         if not transfer_to_memory_every:
@@ -76,17 +76,17 @@ class Iterator:
         self.total_step=0
         self.accepted_steps=0
         self.last_accepted=0
-        
-        self._create_tens_trajectory(start_from_traj)
+        if not traj_init_step:
+            traj_init_step = len(self.res_trajectory) - 1
+            
+        cur_step = self.res_trajectory.cur_step
+        self.res_trajectory.cur_step = traj_init_step
+        self._create_tens_trajectory()
         self.to(device)
         self.energy.mod_real_space_mat()
         self.prev_e = torch.hstack(self.energy.get_energy_components(self.trajectory))
 
-        try:
-            self.h5_trajectory.file[str(self.h5_trajectory.cur_step).zfill(self.h5_trajectory.string_format_val
-                                                                          )].create_dataset('energies',data=self.prev_e.numpy(force=True))
-        except ValueError:
-            pass
+        self.res_trajectory._set_frame_attr('energies',self.prev_e.cpu())
         self.energy_comp_traj = torch.zeros(self.transfer_to_memory_every,4,device=device)
         
         self._set_change_indices(movable_steps,integration_mod)
@@ -94,6 +94,8 @@ class Iterator:
         self.geom_func = Geometry_Functions()
         self.change = torch.zeros(6,dtype=self.trajectory.origins.dtype,device=device)
         self.normal_mean = torch.zeros(6,device=device)
+        
+        self.res_trajectory.cur_step = cur_step
     
     
     def _set_change_indices(self,movable_steps,integration_mod):
@@ -104,11 +106,11 @@ class Iterator:
             self.movable_ind_len = self.movable_ind.shape[0]
     
     
-    def _create_tens_trajectory(self,start_from_traj):
-        if start_from_traj:
-            init_local_params = torch.from_numpy(self.h5_trajectory._get_frame_attr('local_params'))
-            init_ref_frames = torch.from_numpy(self.h5_trajectory._get_frame_attr('ref_frames'))
-            init_ori = torch.from_numpy(self.h5_trajectory._get_frame_attr('origins'))
+    def _create_tens_trajectory(self):
+        if isinstance(self.res_trajectory._get_frame_attr('local_params'),np.ndarray):
+            init_local_params = torch.from_numpy(self.res_trajectory._get_frame_attr('local_params'))
+            init_ref_frames = torch.from_numpy(self.res_trajectory._get_frame_attr('ref_frames'))
+            init_ori = torch.from_numpy(self.res_trajectory._get_frame_attr('origins'))
             if self.dna_structure.proteins:
                 init_prot_ori = []
                 for protein in self.dna_structure.proteins[::-1]:
@@ -138,10 +140,10 @@ class Iterator:
         self.trajectory = Integrator_Trajectory(self.dna_structure.proteins,dtype,traj_len,ln)
         self.trajectory.origins,self.trajectory.ref_frames = init_total_ori.to(torch.double),init_ref_frames.to(torch.double)
         self.trajectory.local_params = init_local_params.to(torch.double)
-        if hasattr(self,'h5_trajectory'):
-            self.h5_trajectory._set_frame_attr('origins',init_ori)
-            self.h5_trajectory._set_frame_attr('ref_frames',init_ref_frames)
-            self.h5_trajectory._set_frame_attr('local_params',init_local_params)
+        if hasattr(self,'res_trajectory'):
+            self.res_trajectory._set_frame_attr('origins',init_ori)
+            self.res_trajectory._set_frame_attr('ref_frames',init_ref_frames)
+            self.res_trajectory._set_frame_attr('local_params',init_local_params)
         
     def _integration_step(self,KT,save_every,linker_bp_index):
         prot_sl_index = self._apply_rotation(linker_bp_index)
@@ -217,11 +219,7 @@ class Iterator:
 
         
         for i in range(steps):
-            self.h5_trajectory.cur_step += 1
-            self.h5_trajectory.add_frame(self.h5_trajectory.cur_step,origins=origins_traj[i],ref_frames = ref_frames_traj[i],
-                                         local_params=local_params_traj[i])
-            try:
-                self.h5_trajectory.file[str(self.h5_trajectory.cur_step).zfill(self.h5_trajectory.string_format_val)].create_dataset('energies',data=energy_comp_traj[i])
-            except ValueError:
-                self.h5_trajectory.file[str(self.h5_trajectory.cur_step).zfill(self.h5_trajectory.string_format_val)]['energies'][:] = energy_comp_traj[i]
+            self.res_trajectory.cur_step += 1
+            self.res_trajectory.add_frame(self.res_trajectory.cur_step,origins=origins_traj[i],ref_frames = ref_frames_traj[i],
+                                         local_params=local_params_traj[i],energies=energy_comp_traj[i])
     

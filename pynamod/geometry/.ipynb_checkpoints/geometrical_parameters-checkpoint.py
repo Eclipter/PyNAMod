@@ -27,7 +27,7 @@ class Geometrical_Parameters(Geometry_Functions):
             if isinstance(trajectory,H5_Trajectory):
                 self.auto_rebuild = False
         elif not empty:
-            self.trajectory = Tensor_Trajectory(self.dtype,traj_len,self.len,lambda x: mod_Tensor(x,self))
+            self.trajectory = Tensor_Trajectory(self.dtype,traj_len,self.len,mod_Tensor,self)
         if not empty:
             self.get_new_params_set(local_params, ref_frames, origins)
         
