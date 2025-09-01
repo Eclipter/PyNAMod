@@ -88,14 +88,13 @@ class Iterator:
 
         self.res_trajectory._set_frame_attr('energies',self.prev_e.cpu())
         self.energy_comp_traj = torch.zeros(self.transfer_to_memory_every,4,device=device)
-        
+        self.res_trajectory.cur_step = cur_step
         self._set_change_indices(movable_steps,integration_mod)
         
         self.geom_func = Geometry_Functions()
         self.change = torch.zeros(6,dtype=self.trajectory.origins.dtype,device=device)
         self.normal_mean = torch.zeros(6,device=device)
         
-        self.res_trajectory.cur_step = cur_step
     
     
     def _set_change_indices(self,movable_steps,integration_mod):

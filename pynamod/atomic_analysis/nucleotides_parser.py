@@ -179,7 +179,7 @@ class Nucleotide:
     
     **origin**, **ref_frame** - torch.tensors of shapes (1,3) and (3,3). If these variables are used and storage contains None values, get_base_ref_frame function will be called to calculate them.
     
-    **s_residue**, **e_residue* - mda.atoms of standard and experimental residues. If these variables are used and storage contains None values, s_residue will be set from standrad pdb file and e_resiue will either be selected from mda Universe stored in this nucleotide coarse-grained structure class instance. If coarse-grained structure does not have mda Universe, e_residue will also be set from standard pdb file.
+    **s_residue**, **e_residue** - mda.atoms of standard and experimental residues. If these variables are used and storage contains None values, s_residue will be set from standrad pdb file and e_resiue will either be selected from mda Universe stored in this nucleotide coarse-grained structure class instance. If coarse-grained structure does not have mda Universe, e_residue will also be set from standard pdb file.
     
     **next_nucleotide**, **previous_nucleotide** - Nucleotide class links to adjacent nucleotides. The order for both leading and lagging chain is considered to be 5' end to 3'.
     '''

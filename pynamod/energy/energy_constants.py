@@ -94,14 +94,14 @@ def get_tetra_force_consts(tetra_params):
         average_params = [float(i) for i in tetra_params[i+7].split()]
 
         if name not in params_dict.keys():
-            params_dict[name] = {'weight':torch.tensor([weight]),
+            params_dict[name] = {'e_state':torch.tensor([weight]),
                                  'force_matrix':torch.tensor(force_matrix).reshape(1,6,6),
                                  'average_params':torch.tensor(average_params).reshape(1,6)
                                 }
         else:
             old_value = params_dict[name]
             params_dict[name] = {
-                     'weight':torch.hstack([old_value['weight'],torch.tensor([weight])]),
+                     'e_state':torch.hstack([old_value['e_state'],torch.tensor([weight])]),
                      'force_matrix':torch.vstack([old_value['force_matrix'],torch.tensor(force_matrix).reshape(1,6,6)]),
                      'average_params':torch.vstack([old_value['average_params'],torch.tensor(average_params).reshape(1,6)])
             }

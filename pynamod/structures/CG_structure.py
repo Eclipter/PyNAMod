@@ -147,7 +147,6 @@ class CG_Structure:
         coords = []
         
         for ts in self.dna.trajectory:
-            print(1)
             frame_coord = torch.tensor(self.dna.origins.reshape(1,-1,3))
             if self.proteins:
                 prot_coord = torch.vstack([protein.origins for protein in proteins]).reshape(1,-1,3)
@@ -202,6 +201,9 @@ class CG_Structure:
             colors = np.array([cb.cmap(norm(c))[:3] for c in protein.charges]).flatten().tolist()
             view.shape.add_buffer('sphere',position=protein.origins.flatten().tolist(),
                                   color=colors,radius=protein.radii.tolist())
+            
+        if disable_charge_bar:
+            plt.close(fig)
 
         return view    
 
