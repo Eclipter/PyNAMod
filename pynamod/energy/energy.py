@@ -11,6 +11,7 @@ class Energy:
       '''
     def __init__(self,K_free=1,K_elec=1,K_bend=1,KT=300*8.314,salt_c=150,water_epsr = 81,include_elst=True):
         
+        # Setting energy constants
         eps0 = 8.854
         eps0_order = -12
         dist_unit_order = -10
@@ -19,6 +20,7 @@ class Energy:
         na_order = 23
         na = 6.022
         kiloj_order = 3
+        
         self.force_matrix = None
         self.average_step_params = None
         self.K_free = K_free
@@ -49,21 +51,31 @@ class Energy:
             '''
         AVERAGE,FORCE_CONST,DISP = get_consts_olson_98()
         pairtypes = [pair.pair_name for pair in CG_structure.dna.pairs_list]
+        self._set_matrix(pairtypes,'force_matrix',FORCE_CONST)
+        self._set_matrix(pairtypes,'average_step_params',AVERAGE)
+
+        #real space matrices
         self.ignore_neighbors = ignore_neighbors
         self.ignore_protein_neigbors = ignore_protein_neigbors
         if set_dist_mat_sl:
             self._set_dist_mat_slice(CG_structure)
-        self._set_matrix(pairtypes,'force_matrix',FORCE_CONST)
-        self._set_matrix(pairtypes,'average_step_params',AVERAGE)
-        self._set_real_space_force_mat(CG_structure)
+        radii = CG_structure.radii
+        epsilons = CG_structure.eps
+        charges = CG_structure.charges
+        self.radii_sum_prod = (radii+radii.reshape(-1,1))
+        #self.epsilon_mean_prod = torch.outer(epsilons,epsilons)/2
+        self.charges_multipl_prod = torch.outer(charges,charges)  
         
+        
+        self._mod_real_space_mat()
     
     def add_restraints(self,restraints=None,restraint_type=None,CG_structure=None,scaling_factor=1):
         '''
         Attributes: 
         
-        **restraints** - list of restraint objects
-        **restraint_type** - automatic generation of restraint. Could be 'circular_with_linear_restraint','circular_with_elastic_restraint'
+        **restraints** - list of restraint objects.
+        
+        **restraint_type** - automatic generation of restraint. Could be 'circular_with_linear_restraint','circular_with_elastic_restraint'.
         ''' 
         if isinstance(restraints,list):
             self.restraints += restraints
@@ -72,22 +84,6 @@ class Energy:
         elif restraint_type == 'circular_with_elastic_restraint':
             self._get_circular_restraint('elastic',CG_structure,scaling_factor)
             
-    def _get_circular_restraint(self,restraint_func,CG_structure,scaling_factor):
-        dna_length = CG_structure.dna.radii.shape[0]
-        if restraint_func == 'elastic':
-            pairtype = CG_structure.dna.pairs_list[0].pair_name[0] + CG_structure.dna.pairs_list[1].pair_name[1]
-            AVERAGE,FORCE_CONST,DISP = get_consts_olson_98()
-            target = torch.tensor(AVERAGE[pairtype])
-            const = torch.tensor(FORCE_CONST[pairtype])
-        elif restraint_func == 'linear':
-            target = torch.tensor(3.4)
-            const = torch.tensor(0.4)
-        self.restraints += [Restraint(0,CG_structure.dna.origins.shape[0]-1,scaling_factor,target,const,en_restr_func=restraint_func)]
-        self.dist_mat_slice[0:self.ignore_neighbors,
-                            dna_length - self.ignore_neighbors:dna_length] = torch.tril(torch.ones(
-                                            self.ignore_neighbors,self.ignore_neighbors,dtype=bool),diagonal=-1)   
-        self.mod_real_space_mat()
-
             
     def to(self,device):
         self.force_matrix = self.force_matrix.to(device)
@@ -140,17 +136,36 @@ class Energy:
         #return dist_matrix
         
         elastic2 = self._get_elastic_energy(cur_params_storage.local_params)
-        electrostatic2,spatial2,e_mat,s_mat = self._get_real_space_slice_energy(dist_matrix,radii_sum_prod,charges_multipl_prod)
+
+        electrostatic2,e_mat = self._get_electrostatic_e(dist_matrix,charges_multipl_prod)
+        spatial2,s_mat = self._get_spatial_e(dist_matrix,radii_sum_prod)
+        
         restraint2 = self._get_restraint_energy(cur_params_storage)
         return (elastic2-elastic1,electrostatic2-electrostatic1,spatial2-spatial1,restraint2-restraint1),e_mat,s_mat
     
     
-    def mod_real_space_mat(self):
-        sl = torch.ones(*self.radii_sum_prod.shape,dtype=bool)
-        sl[self.dist_mat_slice] = False
-        self.radii_sum_prod[sl] = 0
-        #self.epsilon_mean_prod[sl] = 0
-        self.charges_multipl_prod[sl] = 0
+    def _mod_real_space_mat(self):
+        inv = ~self.dist_mat_slice
+        self.radii_sum_prod[inv] = 0
+        #self.epsilon_mean_prod[inv] = 0
+        self.charges_multipl_prod[inv] = 0
+        
+    def _get_circular_restraint(self,restraint_func,CG_structure,scaling_factor):
+        dna_length = CG_structure.dna.radii.shape[0]
+        if restraint_func == 'elastic':
+            #Might use incorrect pair
+            pairtype = CG_structure.dna.pairs_list[0].pair_name[0] + CG_structure.dna.pairs_list[1].pair_name[1]
+            AVERAGE,FORCE_CONST,DISP = get_consts_olson_98()
+            target = torch.tensor(AVERAGE[pairtype])
+            const = torch.tensor(FORCE_CONST[pairtype])
+        elif restraint_func == 'linear':
+            target = torch.tensor(3.4)
+            const = torch.tensor(0.4)
+        self.restraints += [Restraint(0,CG_structure.dna.origins.shape[0]-1,scaling_factor,target,const,en_restr_func=restraint_func)]
+        self.dist_mat_slice[0:self.ignore_neighbors,
+                            dna_length - self.ignore_neighbors:dna_length] = torch.tril(torch.ones(
+                                            self.ignore_neighbors,self.ignore_neighbors,dtype=bool),diagonal=-1)   
+        self._mod_real_space_mat()
         
      
     def _get_matr_slices(self,mat,ind,prot_ind):
@@ -160,23 +175,8 @@ class Energy:
         matrix = torch.zeros((len(pairtypes),*ref['CG'].shape),dtype=torch.double)
         for i in range(len(pairtypes)-1):
             step = str(pairtypes[i][0]+pairtypes[i+1][0])
-            matrix[i+1] = torch.Tensor(ref[step])
+            matrix[i+1] = torch.tensor(ref[step])
         setattr(self,attr,matrix)
-    
-    
-    def _set_real_space_force_mat(self,CG_structure):
-        radii = CG_structure.radii
-        epsilons = CG_structure.eps
-        charges = CG_structure.charges
-        self.radii_sum_prod = (radii+radii.reshape(-1,1))
-        #self.epsilon_mean_prod = torch.outer(epsilons,epsilons)/2
-        self.charges_multipl_prod = torch.outer(charges,charges)
-        
-    
-    def _get_real_space_triform(self):
-        #self._triform(self.epsilon_mean_prod)
-        return self._triform(self.radii_sum_prod),self._triform(self.charges_multipl_prod)
-        
     
     def _set_dist_mat_slice(self,CG_structure):
         length = CG_structure.radii.shape[0]
@@ -199,29 +199,18 @@ class Energy:
             self.dist_mat_slice[low:high,start:stop] = False
             start = stop
         
-    def _triform(self,square_mat):
-        return square_mat[self.dist_mat_slice]
-    
-
-        
     def _get_elastic_energy(self,steps_params):
         params_dif = steps_params - self.average_step_params
         dif_matrix = torch.matmul(params_dif.reshape(-1,6,1), params_dif.reshape(-1,1,6))
         return self.K_bend*torch.einsum('ijk,ijk',dif_matrix, self.force_matrix)/2.0
     
-    def _get_real_space_slice_energy(self,dist_matrix,radii_sum_prod,charges_multipl_prod):
-
-        es,e_mat = self._get_electrostatic_e(dist_matrix,charges_multipl_prod)
-        sp,s_mat = self._get_spatial_e(dist_matrix,radii_sum_prod)
-        
-        return es,sp,e_mat,s_mat
     
     def _get_real_space_total_energy(self,origins1,save_matr=True,square_mat_ln=None):
         dist_matrix = self._cdist(origins1,origins1)
-        dist_matrix = self._triform(dist_matrix)
+        dist_matrix = dist_matrix[self.dist_mat_slice]
         
         
-        radii_sum_prod,charges_multipl_prod = self._get_real_space_triform()
+        radii_sum_prod,charges_multipl_prod = self.radii_sum_prod[self.dist_mat_slice],self.charges_multipl_prod[self.dist_mat_slice]
         es,e_mat = self._get_electrostatic_e(dist_matrix,charges_multipl_prod)
         sp,s_mat = self._get_spatial_e(dist_matrix,radii_sum_prod)
         if save_matr:
@@ -234,8 +223,8 @@ class Energy:
     
     def _get_real_space_softmax_energy(self,origins,*args,**kwards):
         dist_matrix = self._cdist(origins,origins)
-        dist_matrix = self._triform(dist_matrix)
-        radii_sum_prod = self._triform(self.radii_sum_prod)**2
+        dist_matrix = dist_matrix[self.dist_mat_slice]
+        radii_sum_prod = self.radii_sum_prod[self.dist_mat_slice]**2
         energy = self.eps*(((radii_sum_prod/(dist_matrix**2+0.0001*radii_sum_prod))**6).sum())
         return torch.tensor(0,device = self.radii_sum_prod.device),energy
     

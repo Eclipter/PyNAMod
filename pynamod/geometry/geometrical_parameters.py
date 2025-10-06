@@ -49,18 +49,18 @@ class Geometrical_Parameters(Geometry_Functions):
             if not origins.dtype == ref_frames.dtype == local_params.dtype:
                 raise TypeError("Dtypes don't match")
                 
-            self.__set_from_all_params(local_params,ref_frames,origins)
+            self._set_from_all_params(local_params,ref_frames,origins)
 
         elif set_from_r_and_o:
             
             if origins.dtype != ref_frames.dtype:
                 raise TypeError("Origins and reference frames dtypes don't match")
             
-            self.__set_from_r_and_o(ref_frames,origins)
+            self._set_from_r_and_o(ref_frames,origins)
             
         elif set_from_local_params:
             
-            self.__set_from_local_params(local_params)
+            self._set_from_local_params(local_params)
             
         else:
             raise TypeError('Geometrical_parameters should be initialized with local parameters or reference frames and origins')
@@ -69,18 +69,18 @@ class Geometrical_Parameters(Geometry_Functions):
         return self
     
     
-    def __set_from_all_params(self,local_params,ref_frames,origins):
+    def _set_from_all_params(self,local_params,ref_frames,origins):
         for attr in ('ref_frames','origins','local_params'):
             tens = locals()[attr]
             setattr(self,attr,tens)
             
-    def __set_from_r_and_o(self,ref_frames,origins):
+    def _set_from_r_and_o(self,ref_frames,origins):
         self.ref_frames = ref_frames
         self.origins = origins    
         self.local_params = torch.zeros(self.len,6,dtype=self.dtype)
         self.rebuild('rebuild_local_params') 
         
-    def __set_from_local_params(self,local_params):
+    def _set_from_local_params(self,local_params):
         self.local_params = local_params
         self.ref_frames = torch.zeros((self.len,3,3),dtype=self.dtype)
         self.origins = torch.zeros((self.len,1,3),dtype=self.dtype)

@@ -22,11 +22,12 @@ class DNA_Structure:
         - **origins**, **ref_frames**, **step_params** - properties that return tensors from All_Coords class with parameters for this DNA structure.'''
     def __init__(self,**kwards):
         self.pairs_list = []
+        self.movable_steps = torch.empty(0,dtype=bool)
         for name,value in kwards.items():
             setattr(self,name,value)
                 
     def build_from_u(self,leading_strands,pairs_in_structure = None,traj_len=1,
-                     sel='(type C or type O or type N) and not protein',overwrite_existing_dna=False):
+                     sel='(type C or type O or type N) and not protein',overwrite_existing_dna=False,movable=False):
         '''
         This method is called by CG_Structure.analyze_dna and runs full analysis of atomic structure.
         '''
@@ -41,6 +42,7 @@ class DNA_Structure:
             
         self.get_geom_params(traj_len,overwrite_existing_dna)
         self._set_pair_params_list()
+        self.movable_steps = torch.full((len(self.pairs_list),),movable)
         
     def get_geom_params(self,traj_len=1,overwrite_existing_dna=False):
         '''This method prepairs reference frames and orgins frim pairs, than creates object of All_Coords or updates existing one.'''
@@ -53,7 +55,7 @@ class DNA_Structure:
             self.geom_params = Geometrical_Parameters(ref_frames=ref_frames,origins=origins,traj_len = traj_len)
     
     
-    def generate(self,sequence,radius=10,charge=-2,eps=0.5):
+    def generate(self,sequence,radius=10,charge=-2,eps=0.5,movable=True):
         '''This method is called by CG_Structure.build_dna and creates linear DNA based on given sequence and BDNA step.'''
         sequence = sequence.upper()
         rev_sequence = Seq(sequence).reverse_complement()
@@ -87,6 +89,7 @@ class DNA_Structure:
 
         self.geom_params = Geometrical_Parameters(local_params=step_params)
         self._set_pair_params_list()
+        self.movable_steps = torch.full((len(self.pairs_list),),movable)
     
     def analyze_trajectory(self,trajectory):
         '''Runs analysis of all frames in trajectory based on previously generated pairs list.'''
@@ -143,6 +146,8 @@ class DNA_Structure:
         step_params[0] = torch.zeros(6)
         self.geom_params = Geometrical_Parameters(local_params=step_params)
         self._set_pair_params_list()
+        self.movable_steps = torch.cat([self.movable_steps]+[structure.movable_steps for structure in structures])
+        self.movable_steps[0] = False
         
         return self
         
@@ -205,6 +210,7 @@ class DNA_Structure:
         new.radii = self.radii.clone()
         new.eps = self.eps.clone()
         new.charges = self.charges.clone()
+        new.movable_steps = self.movable_steps.clone()
         new.geom_params = self.geom_params.copy()
         new.pairs_list = self.pairs_list.copy()
         new.nucleotides = self.nucleotides.copy()
@@ -233,6 +239,7 @@ class DNA_Structure:
         group.create_dataset('step_params',data=self.step_params,**dataset_kwards)
         group.create_dataset('origins',data=self.origins,**dataset_kwards)
         group.create_dataset('ref_frames',data=self.ref_frames,**dataset_kwards)
+        group.create_dataset('movable_steps',data=self.movable_steps,dtype=bool)
         
     def load_from_h5(self,file):
         data = file['DNA_data']
@@ -246,6 +253,7 @@ class DNA_Structure:
                                                  origins = torch.tensor(data['origins']),
                                                  ref_frames = torch.tensor(data['ref_frames'])
                                                  )
+        self.movable_steps = torch.tensor(data['movable_steps'])
         self._set_pair_params_list()
             
     def _set_pair_params_list(self):

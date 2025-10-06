@@ -18,13 +18,13 @@ class CG_Structure:
     
         Key attributes:
         
-        - **dna** - DNA_Structure object
+        - **dna** - DNA_Structure object.
         
-        - **proteins** - list of Protein objects
+        - **proteins** - list of Protein objects.
         
         - **all_coords** - All_Coords object that contains geometrical parameters of pairs steps in DNA structure, reference frames of these steps and origins of beads associated with these steps and of proteins CG beads. This object could also store trajectories of geometrical parameters.
         
-        - **u** - (optional) contains initial mda Universe if given
+        - **u** - (optional) contains initial mda Universe if given.
     '''
     def __init__(self,dna_structure=None,proteins = None,mdaUniverse = None,pdb_id=None,file=None,
                  all_coords = None,add_proteins = True,trajectory=None):
@@ -53,7 +53,8 @@ class CG_Structure:
         else:
             self.proteins = []
         
-    def analyze_dna(self,leading_strands=None,pairs_in_structure=None,sel='(type C or type O or type N) and not protein',trajectory=None,overwrite_existing_dna=False):
+    def analyze_dna(self,leading_strands=None,pairs_in_structure=None,sel='(type C or type O or type N) and not protein',
+                    trajectory=None,overwrite_existing_dna=False,movable=False):
         '''Method that runs analysis of mda Universe and trajectory if given.
         
             Arguments:
@@ -63,25 +64,32 @@ class CG_Structure:
             **pairs_in_structure**: list of nucleotide pairs in correct order that will be used if given instead of automatic determination. Each item of this list should have the following format: resid, segid of nucleotide in leading strand, resid,segid of nucleotide in lagging strand.
             
             **sel**: selection string for mda Universe to choose atoms which will be included in analysis.
+            
+            **movable** - boolean default value to set for each step for Carlo Simulations.
         '''
         if self.dna.pairs_list and not overwrite_existing_dna:
             raise ValueError('DNA was already analyzed for this CG Structure. Use overwrite_existing_dna to proceed anyway.')
             
         if trajectory is None:
             trajectory = self.u.trajectory[1:]
-        self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory)+1,sel,overwrite_existing_dna)
+        self.dna.build_from_u(leading_strands,pairs_in_structure,len(trajectory)+1,sel,overwrite_existing_dna,movable=movable)
         
         if len(trajectory) != 0:
             self.dna.analyze_trajectory(trajectory)
             
-    def build_dna(self,sequence):
+    def build_dna(self,sequence,movable=True):
         '''Method that runs generation of linear DNA structure with given sequence. Each pair of nucleotides and each step of pairs gains similar average BDNA parameters.
             
             Arguments:
             
             **sequence** - string of nucleotide base types to generate structure from.
+            
+            **movable** - boolean default value to set for each step for Carlo Simulations.
             '''
-        self.dna.generate(sequence)
+        if self.dna.pairs_list:
+            raise ValueError('DNA was already initialized for this CG Structure.')
+        
+        self.dna.generate(sequence,movable=movable)
         
     def save_to_h5(self,file,**dataset_kwards):
         self.dna.save_to_h5(file,**dataset_kwards)
