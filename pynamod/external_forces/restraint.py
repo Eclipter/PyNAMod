@@ -19,7 +19,7 @@ class Restraint:
         o1 = intg_trajectory.origins[self.pair1_index]
         o2 = intg_trajectory.origins[self.pair2_index]
         dist = (o1-o2).norm()
-        return (self.force_constant*dist/self.param_constant).reshape(1)
+        return self.force_constant*dist/self.param_constant
         
     def _get_elastic_restraint_energy(self,intg_trajectory):
 
@@ -30,7 +30,7 @@ class Restraint:
         params = Geometrical_Parameters(origins=origins,ref_frames=ref_frames).local_params[1].to(self.target_value.device)
         params_dif = params - self.target_value
         dif_matrix = torch.matmul(params_dif.reshape(6,1), params_dif.reshape(1,6))
-        return (self.force_constant*torch.einsum('ij,ij',dif_matrix, self.param_constant)/2.0).reshape(1)
+        return self.force_constant*torch.einsum('ij,ij',dif_matrix, self.param_constant)/2.0
     
     def to(self,device):
         self.target_value = self.target_value.to(device)

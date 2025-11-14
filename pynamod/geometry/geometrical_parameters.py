@@ -68,7 +68,6 @@ class Geometrical_Parameters(Geometry_Functions):
         self._auto_rebuild_sw = self.auto_rebuild
         return self
     
-    
     def _set_from_all_params(self,local_params,ref_frames,origins):
         for attr in ('ref_frames','origins','local_params'):
             tens = locals()[attr]
@@ -91,15 +90,12 @@ class Geometrical_Parameters(Geometry_Functions):
         new.trajectory = self.trajectory.copy(new)
         return new
     
-    
     def rebuild(self,rebuild_func_name,*args,**kwards):
         self._auto_rebuild_sw = False
 
         getattr(self,rebuild_func_name)(*args,**kwards)
         
         self._auto_rebuild_sw = self.auto_rebuild
-        
-        
         
     def __getitem__(self,sl):
         neg_step = False
@@ -118,10 +114,6 @@ class Geometrical_Parameters(Geometry_Functions):
             it.local_params *= -1
         
         return it
-        
-        
-        
-    
     
     def __setter(self,value,attr,rebuild_func_name):
         self.trajectory._set_frame_attr(attr,value)

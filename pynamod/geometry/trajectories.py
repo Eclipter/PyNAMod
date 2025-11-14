@@ -23,11 +23,21 @@ class Trajectory:
             
         self.cur_step = 0
         
+    origins = property(fset=lambda self,value: self._set_frame_attr('origins',value),
+                       fget=lambda self: self._get_frame_attr('origins'))
+    ref_frames = property(fset=lambda self,value: self._set_frame_attr('ref_frames',value),
+                          fget=lambda self: self._get_frame_attr('ref_frames'))
+    local_params = property(fset=lambda self,value: self._set_frame_attr('local_params',value),
+                            fget=lambda self: self._get_frame_attr('local_params'))
+    prot_origins = property(fset=lambda self,value: self._set_frame_attr('prot_origins',value),
+                       fget=lambda self: self._get_frame_attr('prot_origins'))
+        
 
 class Tensor_Trajectory(Trajectory):
     def __init__(self,dtype,traj_len,data_len,traj_class,*traj_class_attrs,attrs_names=None,shapes=None):
         self.shapes = [(traj_len,data_len,1,3),(traj_len,data_len,3,3),(traj_len,data_len,6)]
         self.dtype = dtype
+        self.data_len = data_len
         self.traj_class = traj_class
         self.traj_class_attrs = traj_class_attrs
         if shapes:
@@ -158,6 +168,9 @@ class H5_Trajectory(Trajectory):
         for attr,value in attrs.items():
 
             self.file[str(self._last_frame_ind).zfill(self.string_format_val)][attr][:] = value
+            
+    def copy(self):
+        return self
 
 
     def _create_frame(self,frame_ind):
@@ -174,7 +187,7 @@ class H5_Trajectory(Trajectory):
     def _get_frame_attr(self,attr,frame=None):
         if not frame:
             frame = self.cur_step
-        return self.file[str(frame).zfill(self.string_format_val)][attr][:]
+        return torch.from_numpy(self.file[str(frame).zfill(self.string_format_val)][attr][:])
     
     def _set_frame_attr(self,attr,value,frame=None):
         if not frame:
@@ -219,34 +232,4 @@ class H5_Trajectory(Trajectory):
     def total_energies(self):
         if not 'energies' in self.attrs_names: return None
         return self.bend_energies + self.elst_energies + self.ld_energies + self.restr_energies
-    
-                                                       
-class Integrator_Trajectory(Tensor_Trajectory):
-    def __init__(self,proteins_list,dtype,traj_len,data_len):
-        if proteins_list:
-            self.prot_origins_ln = sum([protein.n_cg_beads for protein in proteins_list])
-            proteins_data = [[protein.n_cg_beads,protein.ref_pair.ind] for protein in proteins_list]
-            self.proteins_data = torch.tensor(proteins_data,dtype=int).T
-        else:
-            self.prot_origins_ln = 0
-            self.proteins_data = None
-        super().__init__(dtype,traj_len,data_len,torch.tensor)
-        self.data_len = data_len
-        self.origins_traj = torch.zeros(traj_len,data_len+self.proteins_data[0].sum().item(),1,3,dtype=dtype)
-        
-        
-    def get_proteins_slice_ind(self,dna_index):
-        if self.proteins_data is not None:
-            return self.proteins_data[0][self.proteins_data[1] >= dna_index].sum() + self.data_len
-        else:
-            return self.data_len
-        
-
-        
-    origins = property(fset=lambda self,value: self._set_frame_attr('origins',value),
-                       fget=lambda self: self._get_frame_attr('origins'))
-    ref_frames = property(fset=lambda self,value: self._set_frame_attr('ref_frames',value),
-                          fget=lambda self: self._get_frame_attr('ref_frames'))
-    local_params = property(fset=lambda self,value: self._set_frame_attr('local_params',value),
-                            fget=lambda self: self._get_frame_attr('local_params'))
     

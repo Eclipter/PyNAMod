@@ -206,7 +206,6 @@ class DNA_Structure:
     def copy(self):
         '''Creates a deep copy of self.'''
         new = DNA_Structure()
-        new.cg_structure = self.cg_structure
         new.radii = self.radii.clone()
         new.eps = self.eps.clone()
         new.charges = self.charges.clone()

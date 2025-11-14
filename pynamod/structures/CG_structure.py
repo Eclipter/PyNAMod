@@ -109,6 +109,9 @@ class CG_Structure:
                 i += 1
             except KeyError:
                 break
+                
+        return self
+        
     def analyze_protein(self,protein_u=None,n_cg_beads=50,ref_index=None,binded_dna_len=None):
         '''Method that finds protein structure in given mda Universe or Universe attached to the instance of class. Coarse Grained structure is than constructed based on protein and added to the proteins list.
         
@@ -131,7 +134,7 @@ class CG_Structure:
         
         new = Protein(protein_u,n_cg_beads=n_cg_beads,ref_pair = self.dna.pairs_list[ref_index],binded_dna_len=binded_dna_len)
         new.cg_structure = self
-        new.build_model()
+        new.build_model(self.dna)
         self.proteins.append(new)
         
         
@@ -283,12 +286,12 @@ class CG_Structure:
                 
     @property
     def radii(self):
-        return torch.cat([self.dna.radii.reshape(-1)]+[protein.radii for protein in self.proteins[::-1]])
+        return torch.cat([self.dna.radii.reshape(-1)]+[protein.radii for protein in self.proteins])
     
     @property
     def eps(self):
-        return torch.cat([self.dna.eps.reshape(-1)]+[protein.eps for protein in self.proteins[::-1]])
+        return torch.cat([self.dna.eps.reshape(-1)]+[protein.eps for protein in self.proteins])
     
     @property
     def charges(self):
-        return torch.cat([self.dna.charges.reshape(-1)]+[protein.charges for protein in self.proteins[::-1]])
+        return torch.cat([self.dna.charges.reshape(-1)]+[protein.charges for protein in self.proteins])

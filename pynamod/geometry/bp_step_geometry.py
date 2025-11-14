@@ -6,7 +6,7 @@ class Geometry_Functions:
     '''This class contains functions to rebuild reference frames and ori from local DNA parameters for full strucuture or partially with rotation and to rebuild local parameters from reference frames amd origins. This class is supposed to be used as a super class for Geometrical_Parameters.'''
 
     
-    def rebuild_ref_frames_and_ori(self,start_index = 0, stop_index = None, start_ref_frame = None,start_origin = None,rebuild_proteins=False):
+    def rebuild_ref_frames_and_ori(self,start_index = 0, stop_index = None, start_ref_frame = None,start_origin = None):
         if stop_index is None:
             stop_index = self.len
 
@@ -20,9 +20,9 @@ class Geometry_Functions:
         phi = torch.arccos(cos_phi)
         phi[angle_params[:,0]<0] *= -1
 
-        rm = self.__get_r_mat(angle_params[:,2]/2 - phi,gamma/2,phi)
+        rm = self._get_r_mat(angle_params[:,2]/2 - phi,gamma/2,phi)
 
-        r2 = self.__get_r_mat(angle_params[:,2]/2 - phi,gamma,angle_params[:,2]/2 + phi)
+        r2 = self._get_r_mat(angle_params[:,2]/2 - phi,gamma,angle_params[:,2]/2 + phi)
         o2 = torch.matmul(dist_params.reshape(-1,1,3),torch.transpose(rm,2,1))
         
         if start_ref_frame is None:
@@ -58,10 +58,10 @@ class Geometry_Functions:
 
         hinge /= torch.norm(hinge,dim=1).reshape(-1,1)
         RollTilt = torch.arccos((z1*z2).sum(dim = 1))
-        R_hinge = self.__rmat(hinge,-0.5*RollTilt)
+        R_hinge = self._rmat(hinge,-0.5*RollTilt)
         R2p = torch.matmul(R_hinge,R2)
 
-        R1p = torch.matmul(self.__rmat(hinge,0.5*RollTilt),R1)
+        R1p = torch.matmul(self._rmat(hinge,0.5*RollTilt),R1)
         
         twist = torch.arccos((R1p[:,:,1] * R2p[:,:,1]).sum(dim = 1))
         twist[twist.isnan()] = 0
@@ -87,9 +87,6 @@ class Geometry_Functions:
 
         self.om=(o1+o2)/2.0
         self.local_params[start_index + 1:,:3] = torch.matmul((o2-o1).reshape(-1,1,3),self.Rm).reshape(-1,3)
-
-
-
         self.local_params[start_index + 1:,5] = torch.rad2deg(twist)
 
         phi_cos = (hinge * self.Rm[:,:,1]).sum(dim = 1)
@@ -100,44 +97,43 @@ class Geometry_Functions:
 
         self.local_params[start_index + 1:,3] = torch.rad2deg(RollTilt*phi.sin())
         self.local_params[start_index + 1:,4] = torch.rad2deg(RollTilt*phi.cos())
+        
+        
 
-    def rotate_ref_frames_and_ori(self,change_index,stop_index=None):
-        prev_R = self.ref_frames[change_index].clone()
-        prev_o = self.origins[change_index].clone()
-        self.rebuild_ref_frames_and_ori(change_index-1,change_index+1,self.ref_frames[change_index-1],self.origins[change_index-1],rebuild_proteins=False)
-        if change_index != self.origins.shape[0]:
-            rot_matrix = self.ref_frames[change_index].mm(prev_R.T)
-            self.__rotate_R(change_index,rot_matrix)
-            self.__transform_ori(change_index,stop_index,rot_matrix,prev_o,self.origins[change_index])
+    def rotate_ref_frames_and_ori(self,dna_change_index,prot_change_index=None):
+        prev_R = self.ref_frames[dna_change_index].clone()
+        prev_o = self.origins[dna_change_index].clone()
+        self.rebuild_ref_frames_and_ori(dna_change_index-1,dna_change_index+1,self.ref_frames[dna_change_index-1],self.origins[dna_change_index-1])
+        if dna_change_index != self.origins.shape[0]:
+            rot_matrix = self.ref_frames[dna_change_index].mm(prev_R.T)
+            self._rotate_R(dna_change_index,rot_matrix)
+            self._transform_ori(dna_change_index,prot_change_index,rot_matrix,prev_o,self.origins[dna_change_index])
 
-    def __rotate_R(self,change_index,rot_matrix):
+    def _rotate_R(self,change_index,rot_matrix):
         self.ref_frames[change_index+1:] = rot_matrix.reshape(1,3,3).matmul(self.ref_frames[change_index+1:])
-        self.qr_decomp(self.ref_frames[change_index+1:])
+        self._qr_decomp(self.ref_frames[change_index+1:])
 
-    def __transform_ori(self,change_index,stop_index,rot_matrix,prev_ori,changed_ori):
-        self.origins[change_index+1:stop_index] -= prev_ori
-        self.origins[change_index+1:stop_index] = self.origins[change_index+1:stop_index].matmul(rot_matrix.T) + changed_ori
+    def _transform_ori(self,dna_change_index,prot_change_index,rot_matrix,prev_ori,changed_ori):
+        self.origins[dna_change_index+1:] -= prev_ori
+        self.origins[dna_change_index+1:] = self.origins[dna_change_index+1:].matmul(rot_matrix.T) + changed_ori
+        if prot_change_index:
+            self.prot_origins[prot_change_index:] -= prev_ori
+            self.prot_origins[prot_change_index:] = self.prot_origins[prot_change_index:].matmul(rot_matrix.T) + changed_ori
 
-        
-        
-    def qr_decomp(self,r):
+    def _qr_decomp(self,r):
         r[:,:,0] /= r[:,:,0].norm(dim=1,keepdim=True)
         r[:,:,1] -= (r[:,:,1]*r[:,:,0]).sum(dim=1,keepdim=True)*r[:,:,0]
         r[:,:,1] /= r[:,:,1].norm(dim=1,keepdim=True)
         r[:,:,2] -= (r[:,:,2]*r[:,:,0]).sum(dim=1,keepdim=True)*r[:,:,0] + (r[:,:,2]*r[:,:,1]).sum(dim=1,keepdim=True)*r[:,:,1]
         r[:,:,2] /= r[:,:,2].norm(dim=1,keepdim=True)
     
-    
-    
-    def __get_trig(self,angle):
+    def _get_trig(self,angle):
         return angle.cos(),angle.sin()
     
-    
-    
-    def __get_r_mat(self,angle1,angle2,angle3):
-        cos1,sin1 = self.__get_trig(angle1)
-        cos2,sin2 = self.__get_trig(angle2)
-        cos3,sin3 = self.__get_trig(angle3)
+    def _get_r_mat(self,angle1,angle2,angle3):
+        cos1,sin1 = self._get_trig(angle1)
+        cos2,sin2 = self._get_trig(angle2)
+        cos3,sin3 = self._get_trig(angle3)
 
         a = sin1*sin3
         b = cos1*cos3
@@ -153,8 +149,7 @@ class Geometry_Functions:
 
         return r_mat.reshape(-1,3,3)
 
-        
-    def __rmat(self,axis, phi):
+    def _rmat(self,axis, phi):
         u1 = axis[:,0].reshape(-1,1)
         u2 = axis[:,1].reshape(-1,1)
         u3 = axis[:,2].reshape(-1,1)

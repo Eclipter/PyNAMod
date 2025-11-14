@@ -34,13 +34,13 @@ class Protein:
             setattr(self,name,value)
         
     
-    def build_model(self,random_state=None):
+    def build_model(self,dna_structure,random_state=None):
         '''Runs analysis of atomic structure. 
         
             Attributes:
 
             **random_state** - currently not supported.'''
-        self._get_cg_centers(random_state)
+        self._get_cg_centers(dna_structure,random_state)
         self._get_cg_params()
         
     def save_to_h5(self,file,group_name='protein_0_CG_parameters',**dataset_kwards):
@@ -81,7 +81,7 @@ class Protein:
         self.eps = self.eps.to(device)
         self.ref_vectors = self.ref_vectors.to(device)
     
-    def _get_cg_centers(self,random_state):
+    def _get_cg_centers(self,dna_structure,random_state):
         '''Runs optimization algorithm of CG beads positions according to procedure described in https://doi.org/10.1016/j.str.2006.10.003'''
         steps = 200*self.n_cg_beads
         
@@ -110,8 +110,8 @@ class Protein:
             origins = origins + eps * np.exp(-k_beads/lmbd).reshape(-1,1) * (ref_atom_r - origins)
         
         origins = torch.from_numpy(origins.reshape(-1,1,3))
-        ref_om = self.ref_pair.om
-        ref_Rm = self.ref_pair.Rm
+        ref_om = torch.tensor(dna_structure.origins[self.ref_pair.ind]).to(origins.dtype)
+        ref_Rm = torch.tensor(dna_structure.ref_frames[self.ref_pair.ind]).to(origins.dtype)
         self.ref_vectors = torch.matmul((origins - ref_om),ref_Rm)
         
 
@@ -121,10 +121,12 @@ class Protein:
         '''This method assigns each atom to a CG beads, than the charge of each bead is determined as a sum of charges of its atoms, and radii is defined by radius of gyration of atom groups of this CG bead.'''
         classifier = KNeighborsClassifier(1)
         classifier.fit(self.origins.reshape(-1,3),range(self.n_cg_beads))
+
         groups = classifier.predict(self.u.atoms.positions)
         radii = np.zeros(self.n_cg_beads)
         self.charges = np.zeros(self.n_cg_beads)
         self.masses = np.zeros(self.n_cg_beads)
+
         for i in range(self.n_cg_beads):
             sel = self.u.atoms[groups==i]
             radii[i] = sel.radius_of_gyration()
