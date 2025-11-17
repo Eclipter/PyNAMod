@@ -282,7 +282,7 @@ class Energy:
         if self.restraints:
             return sum([restraint.get_restraint_energy(all_coords) for restraint in self.restraints])
         else:
-            return torch.tensor(0,dtype=torch.double,device=self.radii_sum_prod.device) 
+            return torch.tensor(0,dtype=torch.double,device=self.radii_sum_prod[0].device) 
 
     def _cdist(self,o1,o2):
         o1 = o1.reshape(-1,3)
