@@ -30,7 +30,7 @@ def __get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
     
     base_u = mda.Universe(io.StringIO(nucleotides_pdb[base_type]), format='PDB')
     base_u.add_TopologyAttr('elements', [guess_atom_element(name) for name in base_u.atoms.names])
-    return base_u.select_atoms('not name ORI')
+    return base_u.atoms
 
 def build_graph(mda_structure, d_threshold=1.6):
     '''
@@ -60,9 +60,10 @@ def build_graph(mda_structure, d_threshold=1.6):
 base_graphs = {}
 for base in ['A', 'T', 'G', 'C', 'U']:
     mda_str = __get_base_u(base)
-    base_graphs[base] = build_graph(mda_str)
+    #only purine or pyrimidine ring should be used in analysis
+    base_graphs[base] = build_graph(mda_str[11:])
     
-#Geometrical parameters are calculated based only on atoms of purine or pyrimidine ring
+#Geometrical parameters are calculated based only on atoms of purine or pyrimidine ring, all other atoms should be excluded from analysis
 atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
 
 
