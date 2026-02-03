@@ -320,7 +320,10 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel):
     **nucleotides_data** - Nucleotides_Storage object that contains information about all found nucleotides.
     '''
     nucleotides_data = Nucleotides_Storage(Nucleotide,DNA_Structure.u)
-    sel = DNA_Structure.u.select_atoms(sel)
+    if sel:
+        sel = DNA_Structure.u.select_atoms(sel)
+    else:
+        sel = DNA_Structure.u.select_atoms('(type C or type O or type N) and not protein')
     sel = sel[sel.altLocs == '']
     for res_numb, residue in enumerate(sel.residues):
         residue_str = residue.atoms
