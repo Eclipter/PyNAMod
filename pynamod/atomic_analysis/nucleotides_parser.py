@@ -1,4 +1,5 @@
 import io
+import warnings
 import networkx as nx
 from MDAnalysis.topology.guessers import guess_atom_element
 import MDAnalysis as mda
@@ -13,7 +14,15 @@ from pynamod.atomic_analysis.structures_storage import Nucleotides_Storage
 This module contains functions to analyze given residues in pdb structures to determine if they are nucleotides and their type. A class Nucleotide then represents their data and function get_all_nucleotides runs the full analysis. Analysis is performed with the usage of networkx library to build graphs based on experimental structures amd standard purine and pyrimidine residues of nucleotides structures. Graphs contain nodes with saved types of atom elements and edges that represent bonds based on distance cut off. Nucleotides are then determined by checking if standard graph is subgraph of experimental graph.
 '''
 
-def __get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings(
+    'ignore',
+    message='Element information is missing, elements attribute will not be populated.*',
+    category=UserWarning
+)
+
+
+def get_base_u(base_type,nucleotides_pdb=nucleotides_pdb):
     '''
     Function that is used to properly open standard mda universe of a nucleotide of a given type.
     
@@ -59,7 +68,7 @@ def build_graph(mda_structure, d_threshold=1.6):
 #Create a dict of standard graphs
 base_graphs = {}
 for base in ['A', 'T', 'G', 'C', 'U']:
-    mda_str = __get_base_u(base)
+    mda_str = get_base_u(base)
     #only purine or pyrimidine ring should be used in analysis
     base_graphs[base] = build_graph(mda_str[11:])
     
@@ -117,7 +126,7 @@ def get_base_ref_frame(s_res,e_res):
     return R,o
 
 
-def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T', 'A', 'C', 'U']):
+def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T', 'A', 'C', 'U'], use_full_nucleotide=False):
     # TODO: tune speed
     '''
     Finds if atoms of a given residue is nucleotide and gets it type. This function constructs graph of an experimental residue and determines if standard graph is subgraph of it. Then atoms that are not needed in further analysis are removed.
@@ -140,7 +149,19 @@ def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T',
     
     **true_base** - name of this residue in one letter code.
     '''
+    # Create a dict of standard graphs
+    base_graphs = {}
+    for base in ['A', 'T', 'G', 'C', 'U']:
+        mda_str = get_base_u(base)
+        # only purine or pyrimidine ring should be used in analysis
+        if use_full_nucleotide:
+            base_graphs[base] = build_graph(mda_str)
+        else:
+            base_graphs[base] = build_graph(mda_str[11:])
 
+    # Geometrical parameters are calculated based only on atoms of purine or pyrimidine ring, all other atoms should be excluded from analysis
+    atoms_to_exclude = {'A': [5], 'T': [2, 5, 8], 'G': [5, 8], 'C': [2, 5], 'U': []}
+    
     stand_sel = []
     exp_sel = []
     true_base = ''
@@ -155,8 +176,9 @@ def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T',
             mapping = dict(zip(mapping[0].values(), mapping[0].keys()))
 
             true_base = base
-            for i in atoms_to_exclude[true_base]:
-                del (mapping[i])
+            if not use_full_nucleotide:
+                for i in atoms_to_exclude[true_base]:
+                    del (mapping[i])
 
             for id_sub, id_mol in sorted(mapping.items()):
                 exp_sel.append(ismags_inst.graph.nodes[id_mol]['atom'])
@@ -270,7 +292,7 @@ class Nucleotide:
             else:
                 u = get_base_u(self.restype)
                 
-            exp_sel, stand_sel, _ = check_if_nucleotide(residue,candidates=[self.restype])
+            exp_sel, stand_sel, _ = check_if_nucleotide(u,candidates=[self.restype])
             self.__setter('s_residue',sum(stand_sel))
             self.__setter('e_residue',sum(exp_sel))
             value = exp_sel
@@ -303,7 +325,7 @@ class Nucleotide:
     
 
         
-def get_all_nucleotides(DNA_Structure,leading_strands,sel):
+def get_all_nucleotides(DNA_Structure,leading_strands,sel,use_full_nucleotide=False):
     '''
     Applies check_if_nucleotide function to each residue in selection from mda Universe stored in DNA_Structure. All atoms with altLocs are ignored.
     
@@ -325,7 +347,7 @@ def get_all_nucleotides(DNA_Structure,leading_strands,sel):
     for res_numb, residue in enumerate(sel.residues):
         residue_str = residue.atoms
         if 10 < len(residue_str) < 40:  # FIXME
-            exp_sel, stand_sel, base = check_if_nucleotide(residue_str)
+            exp_sel, stand_sel, base = check_if_nucleotide(residue_str, use_full_nucleotide=use_full_nucleotide)
             if base != '':
                 leading_strand = residue.segid in leading_strands
                 R,o = get_base_ref_frame(sum(stand_sel),sum(exp_sel))
