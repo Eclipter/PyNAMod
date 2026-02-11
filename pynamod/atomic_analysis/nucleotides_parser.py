@@ -150,7 +150,6 @@ def check_if_nucleotide(residue, base_graphs=base_graphs,candidates = ['G', 'T',
     true_base = ''
     graph = build_graph(residue)
     for base in candidates:
-        base_graph = base_graphs[base].copy()
         if use_full_nucleotide:
             base_graph = nucleotide_graphs[base].copy()
         else:
